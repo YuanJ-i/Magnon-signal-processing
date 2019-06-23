@@ -2,7 +2,10 @@
 """
 Created on Wed Apr 24 19:01:43 2019
 
-@author: user
+@author: Yuan Ji
+
+NEED optimization for sine fitting
+and abnormal signal exclusion
 """
 import os
 import math
@@ -156,6 +159,10 @@ class signal_processing(object):
         
     
     def _shift(self, signal):
+        #shift raw cosine-like data to sine-like curve for a better fitting
+        '''
+        sometimes the maxima does not appear at the first data point
+        '''
         return signal[28:]+signal[:28]
     
     def _process(self):
