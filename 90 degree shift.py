@@ -79,6 +79,6 @@ def _process(input_root, output_root):
 
 
 
-input_root = "F:\\BaiduNetdiskDownload\\Measurement\\20190618 B264\\Cr2O3 11-20 8w 18kV 21nm 20190418\\4-pin 11-12-9-10-13-14 2K 500uA\\data"
-output_root = "F:\\BaiduNetdiskDownload\\Measurement\\20190618 B264\\Cr2O3 11-20 8w 18kV 21nm 20190418\\4-pin 11-12-9-10-13-14 2K 500uA\shifted_data"
+input_root = "D:\BaiduNetdiskDownload\Cr2O3 magnon\\20190625 B264\\Cr2O3 11-20 8w 18kV 21nm 20190418\\3 pin 11-12-9-10-13-14\\data"
+output_root = "D:\BaiduNetdiskDownload\Cr2O3 magnon\\20190625 B264\\Cr2O3 11-20 8w 18kV 21nm 20190418\\3 pin 11-12-9-10-13-14\\shifted"
 _process(input_root, output_root)
