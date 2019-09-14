@@ -25,16 +25,29 @@ class signal_processing(object):
         self.root=folder
         self.file_full_path=self.root+'//'+filename+'.txt'
         self.fig_folder = self.root+'\\figs'
-        self.temeprature, self.current, self.field, self.gain = self._parse(filename)
-        self.angle, self.V_omega, self.R_omega, self.V_2omega, self.R_2omega = self._get_data()
-        self.IsGoodFitting=True
-        self.amplitude = 0
-        self.amplitude_std = 0
-        self.cleaned_shifted_signal = []
-        self.fitted_signal = []
+        self.temperature, self.current, self.field, self.gain = self._parse(filename)
+        self.angle, self.V_2omega_W, self.R_2omega_W, self.V_2omega_w, self.R_2omega_w = self._get_data()
+        
+        self.IsGoodFitting_w=True
+        self.amplitude_w = 0
+        self.amplitude_std_w = 0
+        self.cod_w = 0
+        self.angle_cleaned_w = []
+        self.cleaned_shifted_signal_w = []
+        self.fitted_signal_w = []
+        
+        self.IsGoodFitting_W=True
+        self.amplitude_W = 0
+        self.amplitude_std_W = 0
+        self.cod_W = 0
+        self.angle_cleaned_W = []
+        self.cleaned_shifted_signal_W = []
+        self.fitted_signal_W = []
+    
     
     def _get_info(self):
-        return self.IsGoodFitting, self.amplitude, self.amplitude_std
+        return self.IsGoodFitting_W, self.amplitude_W, self.amplitude_std_W, \
+        self.IsGoodFitting_w, self.amplitude_w, self.amplitude_std_w
     
     def _parse(self, filename):
         #parse the filename, extract [Temp, Curr, Field, gain]
@@ -42,7 +55,7 @@ class signal_processing(object):
         number_list=re.findall(r"\d+\.?\d*",filename)
         temperature_sting=re.findall(r"\d+\.?\d*K",filename)[0]
         temperature=float(re.findall(r"\d+\.?\d*",temperature_sting)[0])
-        
+#        print(temperature)
     #    print(type(temperature))
         
         current_sting=re.findall(r"\d+\.?\d*uA",filename)[0]
@@ -55,12 +68,12 @@ class signal_processing(object):
     
 
     def _get_data(self):
-        #get 1w and 2w signal
+        #get 2w signal from 2 SR830 simoutaneously
         angle=[]
-        V_omega=[]
-        R_omega=[]
-        V_2omega=[]
-        R_2omega=[]
+        V_2omega_W=[]
+        R_2omega_W=[]
+        V_2omega_w=[]
+        R_2omega_w=[]
         
         file_to_read=open(self.file_full_path , 'r') 
         
@@ -69,12 +82,12 @@ class signal_processing(object):
         for line in lines:
             angle_temp,a, b, c,d,e,f ,R_omega_temp, V_omega_temp, R_2omega_temp, V_2omega_temp  = [float(i) for i in line.split()] 
             angle.append(angle_temp)
-            V_omega.append(V_omega_temp)
-            R_omega.append(R_omega_temp)
-            V_2omega.append(V_2omega_temp)
-            R_2omega.append(R_2omega_temp)
+            V_2omega_W.append(V_omega_temp)
+            R_2omega_W.append(R_omega_temp)
+            V_2omega_w.append(V_2omega_temp)
+            R_2omega_w.append(R_2omega_temp)
         
-        return angle, V_omega, R_omega, V_2omega, R_2omega
+        return angle, V_2omega_W, R_2omega_W, V_2omega_w, R_2omega_w
     
     
     def _abnormal_data_detect_and_deletion(self, signal):
@@ -89,12 +102,20 @@ class signal_processing(object):
         for angle, signal in zip(self.angle, signal):
             if abs(signal-signal_bar)<=2*signal_std:
                 cleaned_angle.append(angle)
-                cleaned_signal.append(signal)
-    #    print(cleaned_angle)
-    #    print("raw data number: "+str(len(angle_list)))        
-    #    print("cleaned data number: "+str(len(cleaned_angle)))
+                cleaned_signal.append(signal-signal_bar)    #normalize to 0
+            else:
+                print('angle, signal: '+str(angle)+' , '+str(signal)+' is omitted!')
+#        print(cleaned_angle)
+#        print("raw data number: "+str(len(angle_list)))        
+#        print("cleaned data number: "+str(len(cleaned_angle)))
         return cleaned_angle, cleaned_signal
-
+    
+    
+    def _normalize(self, signal):
+        #minus the mean
+        return [s-np.mean(signal) for s in signal]
+        
+        
     def _sine_curve_fit(self, angle_list, signal_list):
     #    n=len(angle_list)
         #sine curve fit
@@ -165,60 +186,131 @@ class signal_processing(object):
         '''
         return signal[28:]+signal[:28]
     
-    def _process(self):
-        '''core method'''
-        #90 degree shift of V2w
-        V_2omega_shifted=self._shift(self.V_2omega)
-        #out of range data deletion
-        angle_cleaned, V_2omega_shifted_cleaned=self._abnormal_data_detect_and_deletion(V_2omega_shifted)
-        raw_data=V_2omega_shifted_cleaned
-        self.cleaned_shifted_signal = V_2omega_shifted_cleaned
-        #sine curve fit
-        self.amplitude, self.amplitude_std , predicted_value = self._sine_curve_fit(angle_cleaned, raw_data) 
-        
-        self.fitted_signal = predicted_value
-        cod = self._get_cod(raw_data, predicted_value)
-        #set amplitude to 0 if cod<0.5
-        if cod<0.5:
-            self.IsGoodFitting=False
-            self.amplitude=0
-            
-        return angle_cleaned, V_2omega_shifted_cleaned, predicted_value
     
-    def _plot_raw(self, fig_folder):
+    def _process_w(self, threshold_w = 0.7):
+        '''SR 830, measure shorter Pt'''
+        #90 degree shift of V2w
+        V_2omega_w_shifted=self._shift(self.V_2omega_w)
+        #out of range data deletion
+        self.angle_cleaned_w, self.cleaned_shifted_signal_w = self._abnormal_data_detect_and_deletion(V_2omega_w_shifted)
+
+        
+        #sine curve fit
+        self.amplitude_w, self.amplitude_std_w , self.fitted_signal_w = self._sine_curve_fit(self.angle_cleaned_w, self.cleaned_shifted_signal_w) 
+        
+        
+        cod_w = self._get_cod(self.cleaned_shifted_signal_w, self.fitted_signal_w)
+        self.cod_w = cod_w
+        #set amplitude to 0 if cod<0.5
+        if cod_w<threshold_w:
+            self.IsGoodFitting_w=False
+#            self.amplitude_w=0
+        
+        print("Is it good fitting with cod_w>"+str(threshold_w)+"?\n"+str(self.IsGoodFitting_w)+"\ncod_w = "+str(self.cod_w))
+            
+        return self.angle_cleaned_w, self.cleaned_shifted_signal_w, self.fitted_signal_w
+        
+    
+    def _process_W(self, threshold_W = 0.7):
+        '''SR 830, measure longer Pt'''
+        #90 degree shift of V2w
+        V_2omega_W_shifted=self._shift(self.V_2omega_W)
+        #out of range data deletion
+        self.angle_cleaned_W, self.cleaned_shifted_signal_W = self._abnormal_data_detect_and_deletion(V_2omega_W_shifted)
+
+        
+        #sine curve fit
+        self.amplitude_W, self.amplitude_std_W , self.fitted_signal_W = self._sine_curve_fit(self.angle_cleaned_W, self.cleaned_shifted_signal_W) 
+        
+        
+        cod_W = self._get_cod(self.cleaned_shifted_signal_W, self.fitted_signal_W)
+        self.cod_W = cod_W
+        #set amplitude to 0 if cod<0.5
+        if cod_W<threshold_W:
+            self.IsGoodFitting_W=False
+#            self.amplitude_W=0
+        
+        print("Is it good fitting with cod_W>"+str(threshold_W)+"?\n"+str(self.IsGoodFitting_W)+"\ncod_W = "+str(self.cod_W))
+            
+        return self.angle_cleaned_W, self.cleaned_shifted_signal_W, self.fitted_signal_W
+    
+    def _process(self):
+        '''define threshold'''
+        print('****************************************************************************')
+        print('plot raw data')
+        self._plot_raw(fig_folder = self.root)
+        print('Anaylization begins.')
+        print('Long Pt')
+        self._process_w()
+        print('----------------------------------------------------------------------')
+        print('short Pt')
+        self._process_W()
+        print('----------------------------------------------------------------------')
+        self._plot_shifted(fig_folder = self.root)
+        print('----------------------------------------------------------------------')
+        print('plot fitted data')
+        self._plot_fitted(fig_folder = self.root)
+        
+        print('Amplitude for long Pt: ', self.amplitude_W, 'std: ',self.amplitude_std_W)
+        print('Amplitude for short Pt: ', self.amplitude_w, 'std: ', self.amplitude_std_w)
+        if self.amplitude_W>0 and self.amplitude_w:
+            ratio = self.amplitude_W/self.amplitude_w
+            print('V2w(W)/V2w(w) =', ratio)
+        
+    def _plot_raw(self, fig_folder,savefig = False):
         #plot raw data
+        plot_name = str(self.temperature)+'K '+str(self.field/10000)+'T '+str(self.current)+'uA gain'+str(self.gain)+'-RAW'
         plt.figure()
-        plt.plot(self.angle , self.V_2omega, 'r',label='raw',marker='.')
-        plt.title(str(self.temeprature)+'K '+str(self.field)+'Oe '+str(self.current)+'uA-RAW')
+        plt.plot(self.angle , self.V_2omega_W, 'r',label='long Pt-raw',marker='.')
+        plt.plot(self.angle , self.V_2omega_w, 'b',label='short Pt-raw',marker='.')
+        plt.title(plot_name)
         plt.xlabel('Angle')
-        plt.ylabel('V2w')
+        plt.ylabel('V2w/V')
         plt.legend()
-        plt.savefig(fname=fig_folder+'\\'+str(self.temperature)+'K '+str(self.field)+'Oe '+str(self.current)+'uA-RAW.jpg')
-        plt.close()
+        if savefig:
+            plt.savefig(fname=fig_folder+'\\'+plot_name+'.jpg')
+            plt.close()
+        else:
+            plt.show()
         
-    def _plot_shifted(self):
+    def _plot_shifted(self, fig_folder, savefig = False):
+        plot_name = str(self.temperature)+'K '+str(self.field/10000)+'T '+str(self.current)+'uA gain'+str(self.gain)+'-Shifted'
         plt.figure()
-        plt.plot(self.angle , self._shift(self.V_2omega), 'r',label='raw',marker='.')
-        plt.title(str(self.temeprature)+'K '+str(self.field)+'Oe '+str(self.current)+'uA-Shifted')
+        plt.plot(self.angle , self._normalize(self._shift(self.V_2omega_W)), 'r',label='long Pt-shifted',marker='.')
+        plt.plot(self.angle , self._normalize(self._shift(self.V_2omega_w)), 'b',label='short Pt-shifted',marker='.')
+        plt.title(plot_name)
         plt.xlabel('Angle')
-        plt.ylabel('V2w')
+        plt.ylabel('V2w/V')
         plt.legend()
-        plt.show()
         
-    def _plot_fitted(self, fig_folder):
-        angle_cleaned, V_2omega_shifted_cleaned, predicted_value = self._process()
+        if savefig:
+            plt.savefig(fname=fig_folder+'\\'+plot_name+'.jpg')
+            plt.close()
+        else:
+            plt.show()
+        
+    def _plot_fitted(self, fig_folder, savefig = False):
+        #angle_cleaned, V_2omega_shifted_cleaned, predicted_value = self._process()
         #data washed
+        plot_name = str(self.temperature)+'K '+str(self.field/10000)+'T '+str(self.current)+'uA gain'+str(self.gain)
         plt.figure()
-        plt.plot(angle_cleaned,V_2omega_shifted_cleaned,'r',label='cleaned',marker='.')
-        plt.plot(angle_cleaned,predicted_value,'b--',label='fitting',marker='.')
-        plt.title(str(self.temeprature)+'K '+str(self.field)+'Oe '+str(self.current)+'uA-Fitted with cod='+str(self.cod))
+        plt.plot(self.angle_cleaned_W,self.cleaned_shifted_signal_W,'r',label='long Pt-cleaned',marker='.')
+        plt.plot(self.angle_cleaned_W,self.fitted_signal_W,'cyan',label='long Pt-fitting',marker='.')
+        
+        plt.plot(self.angle_cleaned_w,self.cleaned_shifted_signal_w,'b',label='short Pt-cleaned',marker='.')
+        plt.plot(self.angle_cleaned_w,self.fitted_signal_w,'cyan',label='short Pt-fitting',marker='.')
+        
+        plt.title(plot_name+'\nFitted with cod_W='+str(format(self.cod_W, '.2f')) +' and cod_w=' + str(format(self.cod_w, '.2f')) )
         plt.xlabel('Angle')
-        plt.ylabel('V2w')
+        plt.ylabel('V2w/V')
         plt.legend()
-        plt.savefig(fname=fig_folder+'\\'+str(self.temperature)+'K '+str(self.field)+'Oe '+str(self.current)+'uA-Fit.jpg')
+        if savefig:
+            plt.savefig(fname=fig_folder+'\\'+str(self.temperature)+'K '+str(self.field)+'Oe '+str(self.current)+'uA-Fit.jpg')
     #    print(len(angle_cleaned))
     #    plt.savefig()
-        plt.close()
+            plt.close()
+        else:
+            plt.show()
 
 
 class signal_merge(object):
@@ -226,6 +318,12 @@ class signal_merge(object):
     def __init__(self, root):
         #判定属于哪种数据： curr dep , field dep or temp dep
         self.root =  root
+        
+        #create destination folder for figs and output txts
+        res_folder = self.root+'\\result'
+        if not os.path.exists(res_folder):
+            os.mkdir(res_folder)
+        self.res_folder = res_folder
        
         self.dependence = 'current'
         self.dependence_unit = 'uA'
@@ -234,9 +332,12 @@ class signal_merge(object):
         self.current = 500.0
 #        self.temperature, self.field, self.current, self.gain
         self.folder_name, self.dictionary = self._parse_path(root) 
-        self.variable=[]
-        self.amplitude=[]
-        self.amplitude_std=[]
+        self.variable_W=[]    # can be list of T, H or I: long Pt
+        self.variable_w = []     #short Pt
+        self.amplitude_W=[]
+        self.amplitude_std_W=[]
+        self.amplitude_w=[]
+        self.amplitude_std_w=[]
         
         aquired_para = 0
         self.para_constant =''
@@ -244,7 +345,7 @@ class signal_merge(object):
             if(len(v)==0):
                 self.dependence = k
 #                print(self.dependence)
-                switch = {'temperature': 'K', 'current':'uA', 'field':'T'}
+                switch = {'temperature': 'K', 'current':'uA', 'field':'Oe'}
                 self.dependence_unit = switch[k]
             else:
                 if(k=='temperature'):
@@ -288,14 +389,14 @@ class signal_merge(object):
         pure_txt_name=[]
         txt_full_dir=[]
         g = os.walk(self.root) 
-        for par_dir, _, files in g: 
+        for parent_dir, _, files in g: 
             for file in files: 
-                if file.endswith(".txt"):
+                if os.path.exists(os.path.join(self.root, file)) and file.endswith(".txt"):   #ensure ther is a txt under root path
                     name=file.strip('.txt')
-        #            print(name)
+#                    print(name)
                     pure_txt_name.append(name)
-                    filepath = os.path.join(par_dir, file) 
-        #            print(filepath)
+                    filepath = os.path.join(self.root, file) 
+#                    print(filepath)
                     txt_full_dir.append(filepath)
     
     #    
@@ -314,6 +415,8 @@ class signal_merge(object):
         '''
         #core method
         '''
+        matrix = []      # matrix for txt write, each row is a slice of data
+        
         txt_name_list, txt_dirs = self._find_txt()
         for name, dire in zip(txt_name_list, txt_dirs):
             data_model = signal_processing(self.root, name)
@@ -321,45 +424,112 @@ class signal_merge(object):
             if len(txt_name_list)<5:
                 print("Not enough data point in ["+self.folder_name+"]")
             data_model._process()
-            flag, amplitude, a_std = data_model._get_info()
-            data_model._noise()
+            flag_W, amplitude_W, amplitude_W_std, flag_w, amplitude_w, amplitude_w_std = data_model._get_info()
+            
+            #data_model._noise()
             #change var according to dependence
             switch = {'temperature': temperature, 'current':current, 'field':field}
             var = switch[self.dependence]
             
-            if flag:              #delete the noisy point
-                self.variable.append(var)
-                self.amplitude.append(amplitude)
-                self.amplitude_std.append(a_std)
-                
+            matrix.append([var, amplitude_W, amplitude_W_std, amplitude_w, amplitude_w_std, amplitude_W/amplitude_w])
+            
+            
+            if flag_W:
+                self.variable_W.append(var)
+                self.amplitude_W.append(amplitude_W)
+                self.amplitude_std_W.append(amplitude_W_std)
+            else:
+                print(var,self.dependence_unit,amplitude_W, ' is dropped.')
+            if flag_w:
+                self.variable_w.append(var)
+                self.amplitude_w.append(amplitude_w)
+                self.amplitude_std_w.append(amplitude_w_std)
+            else:
+                print(var,self.dependence_unit, amplitude_w, ' is dropped.')
+          
+            
+        #sort data by var and write to txt
+        #print(matrix)
+        name = self.dependence+' dependence at '+self.para_constant
+        self.write2txt(matrix, name)
 #            self.variable.append(var)
 #            self.amplitude.append(amplitude)
 #            self.amplitude_std.append(a_std)
-#        
-        #sort by current
+#         
+        #sort by current, or field, or temp
         
-        zipped = sorted(zip(self.variable,  self.amplitude, self.amplitude_std))
-        self.variable=[k[0] for k in zipped]
-        self.amplitude=[k[1] for k in zipped]
-        self.amplitude_std=[k[2] for k in zipped]
+        zipped_W = sorted(zip(self.variable_W,  self.amplitude_W, self.amplitude_std_W))
+        self.variable_W=[k[0] for k in zipped_W]
+        self.amplitude_W=[k[1] for k in zipped_W]
+        self.amplitude_std_W=[k[2] for k in zipped_W]
+        
+        zipped_w = sorted(zip(self.variable_w,  self.amplitude_w, self.amplitude_std_w))
+        self.variable_w=[k[0] for k in zipped_w]
+        self.amplitude_w=[k[1] for k in zipped_w]
+        self.amplitude_std_w=[k[2] for k in zipped_w]
+        
+        print('\n\n*********************************************************************************\n')
         print(self.dependence+'-dep '+self.para_constant+'data processing ends.')
-
+        
+    def write2txt(self, matrix, name):
+        #np.savetxt(os.path.join(self.res_folder, name+'.txt'), matrix);
+        matrix = np.array(matrix)
+        i = np.argsort(matrix[:,0])
+        data = matrix[i]
+        data = data.tolist()
+        
+        
+        #write into txt
+        f = open(os.path.join(self.res_folder, name+'.txt'), 'w')
+        #write to txt
+        for u in data:
+            for v in u:
+                f.write(str(v)+' ')
+            f.write('\n')
+        f.close()
+        
+        
     
     def _plot(self):
-        #create destination folder for figs
-        res_folder = self.root+'\\result'
-        if not os.path.exists(res_folder):
-            os.mkdir(res_folder)
+        
+        #write to txt
+        
+        
         
         plt.figure()
         
-        plt.errorbar(self.variable, self.amplitude, yerr=self.amplitude_std, fmt='-o', barsabove=True)
+        plt.errorbar(self.variable_W, self.amplitude_W, yerr=self.amplitude_std_W, fmt='-o', barsabove=True)
+        plt.errorbar(self.variable_w, self.amplitude_w, yerr=self.amplitude_std_w, fmt='-o', barsabove=True)
         plt.title(self.dependence+" dependence @"+self.para_constant)
         plt.xlabel(self.dependence+'('+self.dependence_unit+')')
         plt.ylabel('V2w(V)')
-        plt.savefig(fname=res_folder+'\\'+self.dependence+' dependence at '+self.para_constant+'.jpg')
+        plt.savefig(fname=self.res_folder+'\\'+self.dependence+' dependence at '+self.para_constant+'.jpg')
         plt.show() 
         plt.close()
+        
+    def _plot_ratio(self):
+        #compute the ratio of signal from long Pt and short Pt
+        
+        dict_W = dict(zip(self.variable_W, self.amplitude_W))
+        dict_w = dict(zip(self.variable_w, self.amplitude_w))
+        Var_commom = list(set(dict_W.keys()).intersection(set(dict_w.keys())))
+        ratio = []
+        for var in Var_commom:
+            ratio.append(dict_W[var]/dict_w[var])
+        zip_ratio = sorted(zip(Var_commom, ratio))
+        Var_commom=[k[0] for k in zip_ratio]
+        ratio=[k[1] for k in zip_ratio]
+        
+        plt.figure()
+        plt.plot(Var_commom, ratio, 'b',label='V2w(long Pt)/v2w(short Pt)',marker='.')
+        plt.title(self.dependence+" dependence @"+self.para_constant)
+        plt.xlabel(self.dependence+'('+self.dependence_unit+')')
+        plt.ylabel('ratio')
+        res_folder = self.root+'\\result'
+        plt.savefig(fname=self.res_folder+'\\'+self.dependence+' dependence at '+self.para_constant+'-ratio.jpg')
+        plt.show() 
+        plt.close()
+    
 
 class folder_merge(object):
     def __init__(self, root, meta_var = 'field', meta_constant = 'temperature', assigned_constant = '2K', IsReverse = False):
@@ -473,31 +643,38 @@ class folder_merge(object):
  
 if __name__ == "__main__":
       
-      root="F:\\BaiduNetdiskDownload\\Measurement\\from XWY\\20190415-20190319Cr2O3(11-20) 20nm-S23 10um"
-      folder_root="F:\\BaiduNetdiskDownload\\Measurement\\from XWY\\20190415-20190319Cr2O3(11-20) 20nm-S23 10um\\4-Pin3-4-5-6 9T 2K Curr"
-      filename="1 S23 2.00K90000Oe (7Hz) 0_360deg  700uA1000"
+      root=r"D:\Data\20190903to0905 B264\Cr2O3 11-20 20190507 18nm, Rotator Thermometer"
+      folder_root_1 = r"D:\Data\20190903to0905 B264\Cr2O3 11-20 20190507 18nm, Rotator Thermometer\1-5K 9T 800uA"
+      folder_root_2 = r"D:\Data\20190903to0905 B264\Cr2O3 11-20 20190507 18nm, Rotator Thermometer\2-5K 800uA gain 100-field dep"
+      folder_root_3 = r"D:\Data\20190903to0905 B264\Cr2O3 11-20 20190507 18nm, Sys Thermometer\8-2K 800uA gain 100-field dep"
+      folder_root_4 = r"D:\Data\20190903to0905 B264\Cr2O3 11-20 20190507 18nm, Sys Thermometer\7-2K 9T gain 100-curr dep"
+      folder_root_5 = r"D:\Data\20190903to0905 B264\Cr2O3 11-20 20190507 18nm, Sys Thermometer\4-2K 800uA gain 1000 field dep"
+      folder_root_6 = r"D:\Data\20190903to0905 B264\Cr2O3 11-20 20190507 18nm, Sys Thermometer\9-9T 800uA gain 100-temp dep"
+      folder_root_7 = r"D:\Data\20190909to0911 B264\Cr2O3 11-20 20190608 18nm S12-100um 5um\2-2K 500uA gain 100-field dep"
+      folder_root_8 = r"D:\Data\20190909to0911 B264\Cr2O3 11-20 20190608 18nm S12-100um 5um\3-2K 9T gain 100-curr dep\data"
+      folder_root_9 = r"D:\Data\20190909to0911 B264\Cr2O3 11-20 20190608 18nm S12-100um 5um\4-2K 800uA gain 100-field dep"
+      folder_root_10 = r"D:\Data\20190909to0911 B264\Cr2O3 11-20 20190608 18nm S12-100um 5um\5-9T 500uA gain 100-temp dep"
+      folder_root_11  = r"D:\Data\20190909to0911 B264\Cr2O3 11-20 20190608 18nm S12-100um 5um\6-9T 800uA gain 100-temp dep"
+      folder_root_12 = r"D:\Data\20190903to0905 B264\Cr2O3 11-20 20190507 18nm, Sys Thermometer\10-2K 500uA gain 100-field dep"
+      folder_root_13 = r"D:\Data\20190903to0905 B264\Cr2O3 11-20 20190507 18nm, Sys Thermometer\11-9T 500uA gain 100-temp dep"
+      
+      fig_folder = r"D:\Data\20190903to0905 B264\Cr2O3 11-20 20190507 18nm, Rotator Thermometer\1-5K 9T 800uA\test"
+      filename_0 = "3 20190507 Cr2O3 11-20 18nm- S1 200um 4um 4.98K90000Oe (AC) 0_360deg  800uA10"
+      filename_1 = "1 20190507 Cr2O3 11-20 18nm- S1 200um 4um 4.99K90000Oe (AC) 0_360deg  800uA100"
+      filename_2 = "2 20190507 Cr2O3 11-20 18nm- S1 200um 4um 4.98K90000Oe (AC) 0_360deg  800uA1000"
       '''
-      signal = signal_processing(folder_root, filename)
-      signal._process()
-      signal._noise()
+      signal = signal_processing(folder_root, filename_0)
       
-      signal_pack=signal_merge(root)
-      signal_pack._process()
-      
+      signal._process(fig_folder)
       '''
+      signal_m = signal_merge(folder_root_13)
+      signal_m._process()
+      signal_m._plot()
+      signal_m._plot_ratio()
+
+
       
-      #test for folder_marge class
       
-      model = folder_merge(root, meta_var = 'temperature', meta_constant = 'field', assigned_constant = '9T')
-      model._process()
-      model._plot()
-     
+    
             
 
-
-'''
-nineTesla="F:\\BaiduNetdiskDownload\\Measurement\\from XWY\\20190415-20190319Cr2O3(11-20) 20nm-S23 10um\\4-Pin3-4-5-6 9T 2K Curr"
-model = signal_merge(nineTesla)
-model._process()
-model._plot()
-'''
