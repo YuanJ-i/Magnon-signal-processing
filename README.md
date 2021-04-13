@@ -1,2 +1,2 @@
 # Magnon-signal-processing
-@Wei Han Group
+Automated precessing of exprimental signal by python.
