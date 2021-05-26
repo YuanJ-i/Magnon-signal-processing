@@ -1,2 +1,2 @@
 # Magnon-signal-processing
-Automated precessing of exprimental signal by python.
+Automated processing of magnon exprimental signal by python.
